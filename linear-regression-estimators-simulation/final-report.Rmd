@@ -1,0 +1,619 @@
+---
+output: 
+  pdf_document:
+    toc: false
+    number_sections: true
+    latex_engine: xelatex
+header-includes:
+  - \renewcommand{\contentsname}{Sumário}
+  - \renewcommand{\tablename}{Tabela}
+  - \renewcommand{\listtablename}{Lista de Tabelas}
+  - \renewcommand{\figurename}{Figura}
+  - \renewcommand{\listfigurename}{Lista de Figuras}
+---
+
+\begin{titlepage}
+    \centering
+
+    % Nome da instituição
+    {\large Universidade Estadual de Campinas \par}
+    \vspace{2cm}
+
+    % Título
+    {\LARGE \textbf{Análise da Distribuição Amostral dos Estimadores de Mínimos Quadrados via Simulação Monte Carlo} \par}
+    \vspace{1cm}
+
+    % Disciplina
+    {\large ME613 - Análise de Regressão \par}
+    \vspace{3cm}
+
+    % Autores
+    \begin{flushright}
+        \large
+        Miguel Fiorin
+    \end{flushright}
+
+    \vfill
+
+    % Local e ano
+    {\large Campinas – SP \par}
+    {\large 2026 \par}
+
+\end{titlepage}
+\newpage
+
+\tableofcontents
+
+\listoffigures
+
+\listoftables
+
+\newpage
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE)
+options(scipen=9999)
+```
+
+```{r loadpackages}
+pacotes <- c("tidyverse", "knitr", "kableExtra", "tinytex")
+
+invisible(lapply(pacotes, function(p) {
+  if (!require(p, character.only = TRUE)) {
+    install.packages(p)
+    library(p, character.only = TRUE)
+  }
+}))
+
+if (!tinytex::is_tinytex()) tinytex::install_tinytex()
+
+set.seed(277225)
+```
+
+# Introdução
+
+Considerando o modelo de regressão linear simples: $$Y_i = \beta_0 + \beta_1 X_i + \varepsilon_i$$
+
+com as seguintes suposições:
+
+1.  $Y_i = \beta_0 + \beta_1 X_i + \varepsilon_i, \quad i=1, 2, \ldots, n$ (linearidade)
+
+2.  $\varepsilon_i$ é uma v.a. em que $\mathbb E(\varepsilon_i)=0$ e $Var(\varepsilon_i) = \sigma^2$ desconhecida, para $i = 1, 2, \ldots, n$.
+
+3.  $\varepsilon_i$ e $\varepsilon_j$ são não-correlacionados para $i \neq j$, portanto, $Cov(\varepsilon_i, \varepsilon_j) = 0$ para $i \neq j$.
+
+Temos que os estimadores de mínimos quadrados são dados por: $$\begin{aligned}
+\hat{\beta}_0 &= \bar{Y} - \hat{\beta}_1 \bar{X} \\
+\hat{\beta}_1 &= \frac{\sum_{i=1}^n (X_i - \bar{X})(Y_i - \bar{Y})}{\sum_{i=1}^n (X_i - \bar{X})^2} = \frac{\sum_{i=1}^n X_i Y_i - n \bar X \bar Y}{\sum_{i=1}^n X_i^2 - n \bar X^2}
+= \frac{S_{XY}}{S_{XX}}
+\end{aligned} $$
+
+Temos as seguintes propriedades:
+
+$$\mathbb E(\hat{\beta}_1) = \beta_1$$
+
+$$\mathbb E(\hat{\beta}_0) = \beta_0$$
+
+$$\mathbb Var(\hat{\beta}_1) =\frac{\sigma^2}{\sum_{i=1}^n(X_i-\bar{X})^2}$$
+
+$$Var(\hat{\beta}_0) = \sigma^2 \left( \frac{1}{n} + \frac{\bar{X}^2}{\sum_{i=1}^n (X_i - \bar{X})^2} \right)$$
+
+$$Cov(\hat{\beta}_0, \hat{\beta}_1) = - \sigma^2 \frac{\bar{X}}{\sum_{i=1}^n (X_i - \bar{X})^2} $$
+
+$$s^2 = QME = \frac{SQE}{n-2} = \frac{\sum_{i=1}^n (Y_i - \hat{Y}_i)^2}{n-2}$$
+
+Além disso, temos também que o valor esperado da resposta $Y_i$, fixando $X_i$, é $\mathbb E(Y_i) = \beta_0 + \beta_1 X_i$ e a variância da resposta $Y_i$, fixando $X_i$, é $Var(Y_i)=\sigma^2$.
+
+# Objetivos
+
+Usar o método de simulação de Monte Carlo para estudar a distribuição amostral de $\hat{\beta}_0$ e de $\hat{\beta}_1$. A partir dos dados obtidos, comparar os valores de esperança e variância teóricos/reais com os valores observados e estudar qual distribuição aproximada dos estimadores, mesmo quando a distribuição dos erros não é normal, avaliando, com a simulação, a robustez das propriedades do método de mínimos quadrados.
+
+# Metodologia
+
+## Ambiente de Programação e Pacotes Utilizados
+
+Para estudar empiricamente a distribuição amostral dos estimadores do modelo de regressão linear obtidos pelo método dos Mínimos Quadrados Ordinários (OLS), foi conduzido um experimento de simulação Monte Carlo utilizando a linguagem R, no RStudio.
+
+Inicialmente, foram carregados alguns pacotes essenciais para manipulação de dados, visualização gráfica e formatação de tabelas no relatório. O pacote `tidyverse` foi utilizado para manipulação e organização dos dados, por meio de funções do `dplyr`, bem como para a construção de gráficos utilizando `ggplot2`. O pacote `knitr` foi usado para gerar tabelas formatadas diretamente no documento final, enquanto o pacote `kableExtra` foi utilizado para aprimorar a formatação dessas tabelas, permitindo melhor apresentação visual no relatório final em PDF.
+
+## Estrutura da Simulação Monte Carlo
+
+O modelo populacional considerado neste estudo é um modelo de regressão linear simples definido por
+
+$$
+Y_i = \beta_0 + \beta_1 X_i + \varepsilon_i
+$$
+
+onde $X_i$ representa a variável explicativa, $Y_i$ a variável resposta e $\varepsilon_i$ o termo de erro aleatório.
+
+Para a simulação, foi definido um modelo gerador de dados com parâmetros fixos. Os erros aleatórios $\varepsilon_i$ foram gerados a partir de uma distribuição t de Student com 3 graus de liberdade, garantindo média igual a zero e variância constante, de forma a respeitar as suposições básicas do modelo de regressão linear.
+
+Para a realização da simulação, foram fixados valores arbitrários para os parâmetros populacionais do modelo: $\beta_0 = 2$ (intercepto) e $\beta_1 = 0.5$ (coeficiente angular). Esses valores representam a relação verdadeira entre as variáveis na população simulada.
+
+Em seguida, foi definida uma amostra de tamanho $n = 1000$, correspondente aos valores da variável explicativa $X$. Esses valores foram gerados a partir de uma distribuição uniforme contínua no intervalo $[0, 50]$. Os valores de $X$ foram mantidos fixos ao longo de todas as repetições da simulação, seguindo a abordagem usual da regressão clássica, na qual a variável explicativa é tratada como fixa, permitindo que a variabilidade dos estimadores seja atribuída exclusivamente ao termo de erro aleatório.
+
+A partir dos valores gerados de $X$ e dos erros aleatórios $\varepsilon_i$, foram construídos os valores da variável resposta $Y$ de acordo com a seguinte relação populacional:
+
+$$
+Y_i = 2 + 0.5 X_i + \varepsilon_i
+$$
+
+O procedimento de simulação Monte Carlo foi então repetido 5000 vezes, sendo que em cada repetição foi estimado um modelo de regressão linear simples por meio do método dos mínimos quadrados ordinários. Os estimadores obtidos $\hat{\beta}_0$ e $\hat{\beta}_1$ foram armazenados em cada iteração da simulação.
+
+Ao final das repetições, obteve-se um conjunto de estimativas para cada parâmetro do modelo, permitindo analisar empiricamente a distribuição amostral dos estimadores de mínimos quadrados, bem como suas propriedades estatísticas, como média, variância e formato da distribuição.
+
+# Resultados e Discussão
+
+## Análise da População Gerada
+
+```{r,echo=FALSE}
+beta0 <- 2
+beta1 <- 0.5
+amostra.N <- 1000
+set.seed(277225)
+
+Df.Estimadores <- tibble(
+  B0_hat = numeric(),
+  B1_hat = numeric(),
+)
+
+X <- runif(amostra.N, min = 0, max = 50)
+```
+
+```{r,echo=FALSE}
+times <- 5000
+for (i in 1:times) {
+  erro <- rt(amostra.N, df = 3)
+  Y <- beta0 + beta1*X + erro
+  
+  Df.Simulacao <- tibble(
+  Regressor = X,
+  Resposta = Y
+  )
+  
+  parametros <- lm(Resposta~Regressor, data = Df.Simulacao)
+
+  B0_estimado <- parametros$coefficients[1]
+  B1_estimado <- parametros$coefficients[2]
+
+  Df.Estimadores <- Df.Estimadores %>%
+    add_row(B0_hat = B0_estimado, B1_hat = B1_estimado)
+  
+}
+
+```
+
+```{r}
+Var_Erro <- 3
+SSx <- sum((X - mean(X))^2)
+VarB1 <- Var_Erro / SSx
+VarB0 <- Var_Erro * (1/amostra.N + (mean(X))^2/ SSx)
+
+TabelaVar<- tibble(
+  Estimador = c("B0","B1"),
+  VarianciaSimulada = c(var(Df.Estimadores$B0_hat), var(Df.Estimadores$B1_hat)),
+  ValorVerdadeiro = c(VarB0, VarB1)
+)
+```
+
+```{r, out.width= "60%", fig.cap= "Distribuição da Variável Explicativa (X) na simulação", fig.pos="H", fig.align= "center"}
+Df.Simulacao %>%
+  ggplot(aes(x = Regressor)) +
+  geom_histogram(
+    bins = 35, 
+    fill = "deepskyblue4",
+    alpha = 0.8,
+    color = NA
+  ) +
+  labs(
+    x = "X",
+    y = "Frequência",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, margin = margin(t = 10))
+  )
+```
+
+A população simulada foi gerada por meio da função `runif()` do software R, que cria amostras aleatórias provenientes de uma **distribuição uniforme contínua**. Especificamente, utilizamos os argumentos `min = 0` e `max = 50` para definir os limites inferior e superior da distribuição, e `n = 1000` para determinar o tamanho da população (ou seja, `r 1000` observações).
+
+Isso significa que cada valor gerado tem a **mesma probabilidade** de ser sorteado em qualquer ponto do intervalo entre 0 e 50, caracterizando uma distribuição uniforme. Consequentemente, espera-se que, em uma amostra suficientemente grande, a frequência de observações seja aproximadamente constante ao longo de todo o intervalo.
+
+Essa característica pode ser visualizada no gráfico a seguir, onde observamos uma distribuição relativamente homogênea das contagens ao longo do intervalo considerado, confirmando que a simulação foi conduzida corretamente e está de acordo com o comportamento esperado de uma distribuição uniforme.
+
+```{r}
+Df.Populacao <- tibble(
+  Variavel = c("X", "Y"),
+  
+  #Simulado
+  Media_Simulada = c(mean(X), mean(Y)),
+  Var_Simulada   = c(var(X), var(Y)),
+  
+  # Teórico
+  Media_Teorica  = c(25, (2 + 0.5 * 25)),
+  Var_Teorica = c(50^2/12, beta1^2 * var(X) + Var_Erro)
+)
+
+Df.Populacao %>%
+  kable(
+    caption = "Comparação entre Valores Simulados e Teóricos",
+    col.names = c("Variável", "Média (Simulada)", "Variância (Simulada)", "Média (Teórica)", "Variância (Teórica)"),
+    align = "lcccc"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = F,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = T)
+
+```
+
+A Tabela 1 apresenta uma comparação entre os valores simulados e os respectivos valores teóricos esperados para as variáveis X (variável explicativa), Erro e Y (resposta). O objetivo é verificar se o processo de simulação está alinhado com as propriedades teóricas do modelo de regressão
+
+Observa-se que os valores simulados aproximam-se satisfatoriamente dos valores teóricos. A média de X (25,35) está próxima do valor esperado de 25, que corresponde ao ponto médio da distribuição uniforme no intervalo [0,50]. Sua variância simulada (209,94) também se aproxima da variância teórica de uma distribuição uniforme, calculada como $(50-0)^2/12 \approx 208,33$.
+
+Os erros, por sua vez, apresentam média observada de 0,0157, muito próxima de zero, pressuposto fundamental da regressão linear, e variância de 2,68, próxima do valor teórico estabelecido de 3 (graus de liberdade da distribuição t utilizada).
+
+Para a variável Y, a média observada (14,69) aproxima-se do valor esperado de 14,5, obtido pela expressão $\mathbb{E}[Y] = \beta_0 + \beta_1\mathbb{E}[X] = 2 + 0,5 \times 25$. Sua variância simulada (54,80) também coincide com o valor teórico (54,80), calculado a partir da decomposição da variância no modelo linear: $\beta_1^2 \cdot Var(X) + Var(erro)$.
+
+Cabe destacar que essas aproximações tendem a melhorar à medida que o tamanho da população ($N = 1500$) aumenta, refletindo a consistência dos estimadores e a lei dos grandes números.\
+\
+
+### Gráfico de dispersão
+
+```{r,out.width= "60%", fig.align='center', fig.pos= 'H', fig.cap= "Exemplo de Dados Simulados para Regressão Linear"}
+Df.Simulacao %>%
+  ggplot(aes(x = Regressor, y = Resposta)) +
+  geom_point(
+    alpha = 0.7,
+    size = 2
+  ) +
+  geom_abline(
+    slope = 0.5,
+    intercept = 2,
+    linewidth = 1,
+    color = "blue"
+  ) +
+  labs(
+    x = "Variável explicativa (X)",
+    y = "Variável resposta (Y)",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, margin = margin(t = 10))
+  )
+```
+
+O gráfico acima apresenta um exemplo de uma das 5.000 amostras simuladas. Enquanto os valores de X permanecem fixos (gerados previamente), os erros e os valores de Y são distintos a cada iteração. A reta azul indica a verdadeira relação populacional $Y = 2 + 0,5X + \varepsilon$, com $\varepsilon \sim t_{(3)}$, que deu origem a todos os dados simulados.
+
+## Erros do Modelo
+
+```{r}
+Df.Erro <- tibble(
+  Variavel = "Erro",
+  
+  # Simulado
+  Media_Simulada = mean(erro),
+  Var_Simulada = var(erro),
+  Cov_Simulada = cov(erro[-length(erro)], erro[-1]),
+  
+  # Teórico
+  Media_Teorica = 0,
+  Var_Teorica = 3,
+  Cov_Teorica = 0
+)
+
+TabelaErro <- tibble(
+  Estatistica = c("Média", "Variância", "Covariância"),
+  Observada = c(Df.Erro$Media_Simulada,
+                Df.Erro$Var_Simulada,
+                Df.Erro$Cov_Simulada),
+  Teorica = c(Df.Erro$Media_Teorica,
+              Df.Erro$Var_Teorica,
+              Df.Erro$Cov_Teorica)
+)
+
+TabelaErro %>%
+  kable(
+    caption = "Estatísticas do termo de erro: comparação entre valores observados na simulação e valores teóricos do modelo.",
+    col.names = c("Estatística", "Observada", "Teórica"),
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+A tabela mostra que as estatísticas simuladas do termo de erro estão próximas das propriedades teóricas assumidas no modelo. É importante destacar que os valores apresentados correspondem apenas a uma amostra específica gerada dentro do processo de simulação (looping), sendo utilizados aqui com finalidade ilustrativa. Portanto, pequenas variações nesses números podem ocorrer entre diferentes execuções da simulação.
+
+A média observada (0,0158) é próxima de zero, indicando que os erros estão centrados em torno de zero. A variância simulada (≈2,69) também está relativamente próxima da variância teórica (3), sendo a diferença esperada devido à variabilidade amostral da simulação.
+
+A covariância entre erros foi aproximadamente −0,102, valor próximo de zero, o que sugere ausência de correlação linear relevante entre os termos de erro. Esse resultado está de acordo com a hipótese do modelo de regressão clássico de que $Cov(\varepsilon_i, \varepsilon_j) = 0$ para $i \neq j$.
+
+## Propriedades dos estimadores
+
+### Média
+
+```{r}
+TabelaMedias <- tibble(
+  Estimador = c("$\\beta_0$", "$\\beta_1$"),
+  Media_Simulada = c(mean(Df.Estimadores$B0_hat), mean(Df.Estimadores$B1_hat)),
+  Valor_Verdadeiro = c(2, 0.5)
+)
+
+TabelaMedias %>%
+  mutate(across(where(is.numeric), ~ round(., 6))) %>%
+  kable(
+    format = "latex",
+    caption = "Média dos estimadores (Simulação vs. Realidade)",
+    col.names = c("Estimador", "Média (Simulada)", "Valor Verdadeiro"),
+    align = "lcc",
+    escape = FALSE,
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    latex_options = "hold_position"
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+Ao calcularmos a média dos 5.000 valores estimados para $\hat{\beta}_0$ e $\hat{\beta}_1$ obtidos nas simulações de Monte Carlo, observamos valores muito próximos aos verdadeiros parâmetros populacionais. A média das estimativas de $\hat{\beta}_0$ foi de **1,9979**, enquanto a média de $\hat{\beta}_1$ foi de **0,500025** ; valores extremamente próximos de $\beta_0 = 2$ e $\beta_1 = 0,5$, respectivamente.
+
+Esse resultado evidencia, na prática, a propriedade de **não viés** dos estimadores de mínimos quadrados ordinários, mesmo sob erros com distribuição t de Student.
+
+### Variância
+
+```{r}
+
+TabelaVar <- tibble(
+  Estimador = c("$\\beta_0$", "$\\beta_1$"),
+  Variancia_Simulada = c(var(Df.Estimadores$B0_hat), var(Df.Estimadores$B1_hat)),
+  Variancia_Teorica = c(VarB0, VarB1)
+)
+
+TabelaVar %>%
+  mutate(across(where(is.numeric), ~ round(., 8))) %>%
+  kable(
+    format = "latex",
+    caption = "Variância dos estimadores (Simulada vs. Teórica)",
+    col.names = c("Estimador", "Variância (Simulada)", "Variância (Teórica)"),
+    align = "lcc",
+    escape = FALSE,
+    booktabs = TRUE
+  ) %>%
+  kable_styling(
+    latex_options = c("hold_position"),
+    full_width = FALSE,
+    position = "center"
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+Voltando nossa atenção para a precisão dos estimadores, analisamos agora a **variância amostral** das 5.000 estimativas obtidas via simulação. Os resultados revelam valores praticamente iguais aos teóricos: a variância de $\hat{\beta}_0$ foi de **0,012**, enquanto a de $\hat{\beta}_1$ foi de **0,000014** ; sendo valores que coincidem com as respectivas variâncias teóricas $Var(\hat{\beta}_0) = 0,012$ e $Var(\hat{\beta}_1) = 0,000014$.
+
+Essa correspondência reforça a qualidade do procedimento de simulação e evidencia que a variabilidade dos estimadores está em linha com o previsto pela teoria, mesmo diante de erros com distribuição t de Student.
+
+## Distribuição Amostral
+
+Após compreendermos as características da população simulada, voltamos nossa atenção para a **distribuição amostral do estimador** $\hat{\beta}_0$, obtida a partir das 5.000 iterações do processo de Monte Carlo.
+
+### Estimador $\beta_0$
+
+```{r, out.width= "60%", fig.pos='H', fig.align='center',fig.cap="Distribuição Amostral do Estimador $\\beta_0$"}
+
+Df.Estimadores %>%
+  ggplot(aes(x = B0_hat)) +
+  geom_histogram(
+    bins = 35, 
+    fill = "deepskyblue4", 
+    alpha = 0.8
+  ) +
+  geom_vline(
+    xintercept = beta0, 
+    color = "black", 
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  labs(
+    x = expression(hat(beta)[0]),
+    y = "Frequência",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, margin = margin(t = 10))
+  )
+```
+
+A Figura 2 apresenta a distribuição amostral de $\hat{\beta}_0$ para as 5.000 simulações. O histograma, com 35 intervalos de classe, mostra que as estimativas estão centradas no verdadeiro valor $\beta_0 = 2$ (linha vertical), evidenciando o **não viés** do estimador de OLS. A maior frequência concentra-se entre 1,85 e 2,15, com decaimento gradual em direção às caudas. A distribuição apresenta formato aproximadamente simétrico, refletindo a variabilidade amostral esperada no processo de estimação.
+
+```{r, out.width= "60%", fig.align='center',fig.pos='H', fig.cap="Comparação entre densidade simulada de $\\beta_0$ e normal teórica"}
+Df.Estimadores %>%
+  ggplot(aes(x = B0_hat)) +
+  
+  geom_density(
+    aes(color = "Simulação"), 
+    linewidth = 1
+  ) +
+  
+  geom_vline(
+    xintercept = beta0,
+    linetype = "dotted",
+    color = "black",
+    linewidth = 1
+  ) +
+  
+  stat_function(
+    aes(color = "Normal teórica"),
+    fun = dnorm,
+    args = list(mean = beta0, sd = sqrt(VarB0)),
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  
+  scale_color_manual(
+    values = c(
+      "Simulação" = "deepskyblue4",
+      "Normal teórica" = "#2C3E50"
+    ),
+    name = ""
+  ) +
+  
+  labs(
+    x = expression(hat(beta)[0]),
+    y = "Densidade",
+  ) +
+  
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, margin = margin(t = 10))
+  )
+```
+
+Sobrepondo a densidade não paramétrica (linha azul) à curva normal teórica (linha tracejada), parametrizada com a média amostral de $\beta_0$ e o desvio padrão teórico$\sqrt{\mathrm{Var}(\hat{\beta}_0)}$, observamos uma grande proximidade entre as duas distribuições.
+
+A densidade empírica acompanha de perto o formato normal, com apenas **leves discrepâncias nas proximidades do valor verdadeiro** $\beta_0 = 2$. Esse comportamento era esperado, dado o tamanho da amostra ($n = 1500$) e o número de simulações (5.000 iterações), que conferem estabilidade à estimativa não paramétrica.
+
+A pequena irregularidade observada reflete a influência da distribuição dos erros ($t$ com 3 graus de liberdade), cujas caudas mais pesadas produzem ligeiros desvios em relação à normal teórica.
+
+### Estimador $\beta_1$
+
+```{r, out.width= "60%", fig.align='center', fig.pos= 'H', fig.cap="Distribuição Amostral do Estimador $\\beta_1$"}
+
+Df.Estimadores %>%
+  ggplot(aes(x = B1_hat)) +
+  geom_histogram(
+    bins = 35, 
+    fill = "deepskyblue4", 
+    alpha = 0.8
+  ) +
+  geom_vline(
+    xintercept = beta1, 
+    color = "black", 
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  labs(
+    x = expression(hat(beta)[1]),
+    y = "Frequência",
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, margin = margin(t = 10))
+  )
+```
+
+Dando continuidade à análise, a Figura 3 exibe o histograma da distribuição amostral de $\hat{\beta}_1$ para as 5.000 simulações, também construído com 35 intervalos de classe. Assim como observado para $\hat{\beta}_0$, as estimativas de $\hat{\beta}_1$ concentram-se em torno do verdadeiro valor do parâmetro ($\beta_1 = 0,5$), indicado pela linha vertical preta: outra evidência do **não viés** do estimador de mínimos quadrados.
+
+As estimativas situam-se majoritariamente entre **0,495 e 0,515**, com frequências mais altas próximas ao centro e decaimento suave em direção às caudas. O formato aproximadamente simétrico da distribuição sugere um comportamento que será explorado adiante, quando compararemos a densidade empírica à curva normal.
+
+Novamente, a dispersão observada reflete a variabilidade natural do processo de estimação: diferentes realizações dos erros produzem diferentes valores de $\hat{\beta}_1$, todos oscilando em torno do parâmetro populacional.
+
+```{r, out.width= "60%", fig.align='center', fig.pos='H', fig.cap='Comparação entre densidade simulada de $\\beta_1$ e normal teórica'}
+Df.Estimadores %>%
+  ggplot(aes(x = B1_hat)) +
+  
+  geom_density(
+    aes(color = "Simulação"), 
+    linewidth = 1
+  ) +
+  
+  geom_vline(
+    xintercept = beta1,
+    linetype = "dotted",
+    color = "black",
+    linewidth = 1
+  ) +
+  
+  stat_function(
+    aes(color = "Normal teórica"),
+    fun = dnorm,
+    args = list(mean = beta1, sd = sqrt(VarB1)),
+    linewidth = 1,
+    linetype = "dashed"
+  ) +
+  
+  scale_color_manual(
+    values = c(
+      "Simulação" = "deepskyblue4",
+      "Normal teórica" = "#2C3E50"
+    ),
+    name = ""
+  ) +
+  
+  labs(
+    x = expression(hat(beta)[1]),
+    y = "Densidade",
+  ) +
+  
+  theme_minimal() +
+  
+  theme(
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    plot.subtitle = element_text(size = 11, hjust = 0.5),
+    axis.title = element_text(size = 11),
+    axis.text = element_text(size = 10),
+    legend.position = "top",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10),
+    panel.grid.minor = element_blank(),
+    plot.caption = element_text(size = 9, margin = margin(t = 10))
+  )
+```
+
+A Figura X compara a densidade empírica de $\hat{\beta}_1$ (linha azul) com a distribuição normal teórica (linha tracejada), ajustada com a média amostral e o erro padrão teórico do estimador. Observa-se que a estimativa não paramétrica se aproxima satisfatoriamente da curva normal, evidenciando o efeito do tamanho amostral ($n = 1500$) e do expressivo número de réplicas Monte Carlo (5.000).
+
+Nota-se uma ligeira discordância nas imediações de $\beta_1 = 0,5$, região onde a densidade empírica apresenta pequenas flutuações. Esse desvio pontual é atribuído à estrutura dos erros simulados, provenientes de uma distribuição t de Student com 3 graus de liberdade, que impõe caudas mais alongadas à distribuição dos estimadores, afastando-a sutilmente do comportamento estritamente normal.
+
+# Conclusão
+
+A análise dos histogramas e da sobreposição entre as densidades não paramétricas e as respectivas curvas normais teóricas revela que os estimadores $\hat{\beta}_0$ e $\hat{\beta}_1$ apresentam distribuição aproximadamente normal. Esse comportamento está alinhado à teoria assintótica: à medida que o tamanho amostral ($n \to \infty$) e o número de iterações aumentam, as distribuições dos estimadores convergem para a normalidade.
+
+Corroborando essa evidência visual, as médias e variâncias amostrais apresentadas nas tabelas anteriores mostraram-se extremamente próximas dos valores teóricos, com discrepâncias mínimas. Os erros observados foram pequenos e dentro do esperado para o tamanho da amostra simulada ($n = 1500$) e o número de réplicas Monte Carlo (5.000).
+
+Dessa forma, a simulação de Monte Carlo evidencia, na prática, a **robustez dos estimadores de mínimos quadrados ordinários**: mesmo sob erros com distribuição t de Student (caudas pesadas), as propriedades assintóticas de normalidade e não viés se manifestam de forma consistente.
