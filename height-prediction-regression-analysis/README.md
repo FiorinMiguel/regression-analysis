@@ -42,12 +42,4 @@ This project applies a complete linear regression workflow using real data from 
 - No evidence of lack of fit
 - Statistically significant regression coefficient
 
-## Repository Structure
 
-```text
-.
-├── data/
-├── figures/
-├── report/
-├── scripts/
-└── README.md
