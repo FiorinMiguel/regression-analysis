@@ -5,8 +5,6 @@ Multiple linear regression model built in R to predict used car sale prices base
 ![R](https://img.shields.io/badge/R-Statistical%20Analysis-blue)
 ![tidyverse](https://img.shields.io/badge/tidyverse-data%20wrangling-1f77b4)
 
-![Preview](path/to/screenshot.png)
-
 ## About the project
 
 The project covers the full analytical pipeline: data cleaning, feature engineering, exploratory analysis, and model diagnostics. The initial model showed heteroscedasticity and non-normality of residuals, addressed by applying a log transformation to the response variable, centering the predictors, and removing influential points. An interaction between horsepower and vehicle age was also included, capturing how the value gained from horsepower diminishes as the car ages.
